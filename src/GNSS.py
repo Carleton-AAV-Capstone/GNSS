@@ -1,68 +1,83 @@
-# GNSS Starting code to read to ROS2.
-#!/usr/bin/env python3
-
+# GNSS Code to send to a ROS2 node via PyGPSClient
 import rclpy
 from rclpy.node import Node
-import serial
-import pynmea2
 from sensor_msgs.msg import NavSatFix
-import time
+from PyGPSClient.gpsclient import GPSClient
+from PyGPSClient.gpsparser import NMEAMessage
 
-class GNSSPublisher(Node):
+
+class RTKPublisher(Node):
     def __init__(self):
-        super().__init__('gnss_node')
-        # Publisher for NavSatFix messages
-        self.pub = self.create_publisher(NavSatFix, '/gps/fix', 10)
-        
-        # Initialize the serial connection to the GNSS sensor
-        try:
-            self.ser = serial.Serial('/dev/tty.usbmodem14101', 9600, timeout=1)  # Will Need to Update this port multiple times, for now this only reads from macbook port 1.
-            self.get_logger().info("Connected to GNSS sensor.")
-        except serial.SerialException as e:
-            self.get_logger().error(f"Unable to connect to GNSS sensor: {e}")
-            self.ser = None
+        super().__init__('rtk_publisher')
 
-        # Start publishing GNSS data
-        if self.ser:
-            self.timer = self.create_timer(0.1, self.publish_gnss_data)  # 10 Hz timer, will probably need to update this in the future.
+        # Declare ROS 2 parameters
+        self.declare_parameters(namespace='',
+                                parameters=[
+                                    ('serial_port', '/dev/ttyACM0'), # Will have to change this port a few times, for now it is configured to a USB-C port on Linux
+                                    ('baud_rate', 115200), # Might have to change Baud rate in the future
+                                    ('gnss_topic', '/rtk_fix'), # ROS2 node that it will be called
+                                ])
 
-    def publish_gnss_data(self):
-        try:
-            line = self.ser.readline().decode('ascii', errors='replace').strip()
-            # Check if it's a GGA sentence, which contains GPS data
-            if line.startswith('$GPGGA'):
-                msg = pynmea2.parse(line)
-                # Create the NavSatFix message
-                gps_msg = NavSatFix()
-                gps_msg.header.stamp = self.get_clock().now().to_msg()
-                gps_msg.header.frame_id = "gps"
-                gps_msg.latitude = msg.latitude
-                gps_msg.longitude = msg.longitude
-                gps_msg.altitude = msg.altitude
-                # Publish the GNSS data
-                self.pub.publish(gps_msg)
-                self.get_logger().info(f"Published GNSS Data: Lat {msg.latitude}, Long {msg.longitude}, Alt {msg.altitude}")
-        except pynmea2.ParseError as e:
-            self.get_logger().warn(f"Failed to parse NMEA sentence: {e}")
-        except Exception as e:
-            self.get_logger().error(f"Error reading from GNSS sensor: {e}")
+        # Read parameters
+        self.serial_port = self.get_parameter('serial_port').get_parameter_value().string_value
+        self.baud_rate = self.get_parameter('baud_rate').get_parameter_value().integer_value
+        self.gnss_topic = self.get_parameter('gnss_topic').get_parameter_value().string_value
 
-    def cleanup(self):
-        if self.ser:
-            self.ser.close()
-            self.get_logger().info("Closed serial connection.")
+        # Create ROS 2 publisher
+        self.gnss_pub = self.create_publisher(NavSatFix, self.gnss_topic, 10)
+
+        # Initialize PyGPSClient
+        self.gps_client = GPSClient(self.serial_port, self.baud_rate, self.on_nmea_message)
+
+        # Start GPS client
+        self.get_logger().info('Starting PyGPSClient...')
+        self.gps_client.start()
+
+    def on_nmea_message(self, message: NMEAMessage):
+        """
+        Callback function to handle NMEA messages from PyGPSClient.
+        """
+        if message.sentence_type == 'GGA':  # RTK data is typically in GGA sentences
+            self.publish_rtk_data(message)
+
+    def publish_rtk_data(self, message):
+        """
+        Convert NMEA GGA message to NavSatFix and publish to ROS 2.
+        """
+        navsat_msg = NavSatFix()
+        navsat_msg.header.stamp = self.get_clock().now().to_msg()
+        navsat_msg.latitude = message.latitude
+        navsat_msg.longitude = message.longitude
+        navsat_msg.altitude = message.altitude
+
+        # Fix status: 0 (no fix), 1 (GPS fix), 2 (DGPS fix, including RTK Float/Fixed)
+        navsat_msg.status.status = int(message.gps_qual)
+        navsat_msg.status.service = 1  # GPS
+
+        # Publish the message
+        self.gnss_pub.publish(navsat_msg)
+        self.get_logger().info(f'Published RTK Data: {navsat_msg.latitude}, {navsat_msg.longitude}, {navsat_msg.altitude}')
+
+    def destroy_node(self):
+        """
+        Override the destroy_node method to stop PyGPSClient on shutdown.
+        """
+        self.gps_client.stop()
+        super().destroy_node()
+
 
 def main(args=None):
     rclpy.init(args=args)
-    node = GNSSPublisher()
+    rtk_publisher = RTKPublisher()
+
     try:
-        rclpy.spin(node)
+        rclpy.spin(rtk_publisher)
     except KeyboardInterrupt:
         pass
     finally:
-        node.cleanup()
-        node.destroy_node()
+        rtk_publisher.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
