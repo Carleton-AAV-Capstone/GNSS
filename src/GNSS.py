@@ -16,7 +16,7 @@ class GNSSPublisher(Node):
         
         # Initialize the serial connection to the GNSS sensor
         try:
-            self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)  # Will Need to Update this port multiple times, for now this only reads from macbook port 1.
+            self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)  # Will Need to Update this port multiple times, for now this only reads from Linux port 0.
             self.get_logger().info("Connected to GNSS sensor.")
         except serial.SerialException as e:
             self.get_logger().error(f"Unable to connect to GNSS sensor: {e}")
@@ -30,7 +30,7 @@ class GNSSPublisher(Node):
         try:
             line = self.ser.readline().decode('ascii', errors='replace').strip()
             # Check if it's a GGA sentence, which contains GPS data
-            if line.startswith('$GPGGA'):
+            if line.startswith('$GNGGA'):
                 msg = pynmea2.parse(line)
                 # Create the NavSatFix message
                 gps_msg = NavSatFix()
