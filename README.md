@@ -4,7 +4,7 @@ GNSS code for the autonomous Vehicle
 This Library should also use another GitHub repository called RTKLIB by tomojitakasu [here](https://github.com/tomojitakasu/RTKLIB) for better accuracy.
 ## Steps to activate RTKLIB and GNSS.py:
 
-###INSTALL RTKLIB (Suggested section)
+### INSTALL RTKLIB (Suggested section)
 - clone rtklib ```git clone https://github.com/tomojitakasu/RTKLIB && cd RTKLIB```
 - build the str2str program ```cd app/str2str/gcc/ && make ```
 
