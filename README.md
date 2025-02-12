@@ -17,7 +17,7 @@ This Library should also use another GitHub repository called RTKLIB by tomojita
 
 ## OR use docker
 
-1. Add email to dockerfile add your email to this line in the dockerfile  ```
+1.  save the usb port for the reciever in an environment variable ```export USB_PORT=ttyACM0```
 2.  clone the repo ```git clone https://github.com/Carleton-AAV-Capstone/GNSS && cd GNSS```
 3. build the container ```docker build -t <name of the container> .```
-4. run the container ```sudo docker run -it --device=/dev/ttyACM0 --privileged -e EMAIL_ADDR=<your email> <name of the container>```
+4. run the container ```sudo docker run -it --device=/dev/ttyACM0 --privileged -e EMAIL_ADDR=<your email> -e USB_PORT=${USB_PORT} <name of the container>```
