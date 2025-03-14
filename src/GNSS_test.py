@@ -4,6 +4,7 @@ import serial
 from pyubx2 import UBXReader
 from sensor_msgs.msg import NavSatFix, Imu
 from std_msgs.msg import Float32
+from geometry_msgs.msg import TwistStamped, Vector3Stamped
 
 class GNSSIMUPublisher(Node):
     def __init__(self):
@@ -13,9 +14,11 @@ class GNSSIMUPublisher(Node):
         self.gnss_pub = self.create_publisher(NavSatFix, 'gnss/fix', 10)
         self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
         self.heading_pub = self.create_publisher(Float32, 'imu/heading', 10)
+        self.velocity_pub = self.create_publisher(TwistStamped, 'gnss/velocity', 10)
+        self.acceleration_pub = self.create_publisher(Vector3Stamped, 'gnss/acceleration', 10)
 
         # Serial Connection
-        self.serial_port = "/dev/tty.usbmodem14101"  # Adjust as needed
+        self.serial_port = "/dev/ttyACM0"  # Adjust as needed
         self.baud_rate = 115200
         self.ser = serial.Serial(self.serial_port, self.baud_rate, timeout=1)
         self.ubr = UBXReader(self.ser, protfilter=2)
@@ -31,11 +34,20 @@ class GNSSIMUPublisher(Node):
 
             if msg_type == "NAV-PVT":  # Fused GNSS Position & Velocity
                 gnss_msg = NavSatFix()
-                gnss_msg.latitude = parsed_data.lat / 1e7
-                gnss_msg.longitude = parsed_data.lon / 1e7
+                gnss_msg.latitude = parsed_data.lat
+                gnss_msg.longitude = parsed_data.lon
                 gnss_msg.altitude = parsed_data.hMSL / 1e3
                 self.gnss_pub.publish(gnss_msg)
+
+                # Publish velocity
+                velocity_msg = TwistStamped()
+                velocity_msg.twist.linear.x = parsed_data.velN / 1e3  # 1e3 to convert mm/s to m/s
+                velocity_msg.twist.linear.y = parsed_data.velE / 1e3
+                velocity_msg.twist.linear.z = parsed_data.velD / 1e3
+                self.velocity_pub.publish(velocity_msg)
+
                 self.get_logger().info(f"Published GNSS: {gnss_msg.latitude}, {gnss_msg.longitude}, {gnss_msg.altitude}")
+                self.get_logger().info(f"Published Velocity: {velocity_msg.twist.linear.x}, {velocity_msg.twist.linear.y}, {velocity_msg.twist.linear.z}")
 
             elif msg_type == "ESF-INS":  # Fused IMU Data
                 imu_msg = Imu()
@@ -50,6 +62,15 @@ class GNSSIMUPublisher(Node):
 
                 self.get_logger().info(f"Published IMU: Roll={imu_msg.orientation.x}, Pitch={imu_msg.orientation.y}, Yaw={imu_msg.orientation.z}")
 
+            elif msg_type == "ESF-MEAS":  # Acceleration Data
+                acc_msg = Vector3Stamped()
+                acc_msg.vector.x = parsed_data.data[0] / 1e3
+                acc_msg.vector.y = parsed_data.data[1] / 1e3
+                acc_msg.vector.z = parsed_data.data[2] / 1e3
+                self.acceleration_pub.publish(acc_msg)
+
+                self.get_logger().info(f"Published Acceleration: {acc_msg.vector.x}, {acc_msg.vector.y}, {acc_msg.vector.z}")
+
 def main(args=None):
     rclpy.init(args=args)
     node = GNSSIMUPublisher()
@@ -59,3 +80,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+    
