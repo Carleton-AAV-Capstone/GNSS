@@ -5,6 +5,7 @@ from pyubx2 import UBXReader
 from sensor_msgs.msg import NavSatFix, Imu
 from std_msgs.msg import Float32
 from geometry_msgs.msg import TwistStamped, Vector3Stamped
+import numpy as np
 
 class GNSSIMUPublisher(Node):
     def __init__(self):
@@ -13,7 +14,6 @@ class GNSSIMUPublisher(Node):
         # Publishers
         self.gnss_pub = self.create_publisher(NavSatFix, 'gnss/fix', 10)
         self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
-        self.heading_pub = self.create_publisher(Float32, 'imu/heading', 10)
         self.velocity_pub = self.create_publisher(TwistStamped, 'gnss/velocity', 10)
         self.acceleration_pub = self.create_publisher(Vector3Stamped, 'gnss/acceleration', 10)
 
@@ -49,26 +49,30 @@ class GNSSIMUPublisher(Node):
                 self.get_logger().info(f"Published GNSS: {gnss_msg.latitude}, {gnss_msg.longitude}, {gnss_msg.altitude}")
                 self.get_logger().info(f"Published Velocity: {velocity_msg.twist.linear.x}, {velocity_msg.twist.linear.y}, {velocity_msg.twist.linear.z}")
 
-            elif msg_type == "ESF-INS":  # Fused IMU Data
-                imu_msg = Imu()
-                imu_msg.orientation.x = parsed_data.roll / 1e5
-                imu_msg.orientation.y = parsed_data.pitch / 1e5
-                imu_msg.orientation.z = parsed_data.yaw / 1e5
-                self.imu_pub.publish(imu_msg)
+            elif msg_type == "ESF-INS":
+                x_ang_rate = np.radians(parsed_data.xAngRate)
+                y_ang_rate = np.radians(parsed_data.yAngRate)
+                z_ang_rate = np.radians(parsed_data.zAngRate)
+                
+                x_accel = parsed_data.xAccel
+                y_accel = parsed_data.yAccel
+                z_accel = parsed_data.zAccel
+                
+                
+                ang_vel_msg = Imu()
+                ang_vel_msg.angular_velocity.x = x_ang_rate
+                ang_vel_msg.angular_velocity.y = y_ang_rate
+                ang_vel_msg.angular_velocity.z = z_ang_rate
+                
+                self.imu_pub.publish(ang_vel_msg)
+                self.get_logger().info(f"Published Angular Velocity: {imu_msg.angular_velocity.x}, {imu_msg.angular_velocity.y}, {imu_msg.angular_velocity.z}")
 
-                heading_msg = Float32()
-                heading_msg.data = parsed_data.yaw / 1e5
-                self.heading_pub.publish(heading_msg)
-
-                self.get_logger().info(f"Published IMU: Roll={imu_msg.orientation.x}, Pitch={imu_msg.orientation.y}, Yaw={imu_msg.orientation.z}")
-
-            elif msg_type == "ESF-MEAS":  # Acceleration Data
                 acc_msg = Vector3Stamped()
-                acc_msg.vector.x = parsed_data.data[0] / 1e3
-                acc_msg.vector.y = parsed_data.data[1] / 1e3
-                acc_msg.vector.z = parsed_data.data[2] / 1e3
+                acc_msg.vector.x = x_accel
+                acc_msg.vector.y = y_accel
+                acc_msg.vector.z = z_accel
+                
                 self.acceleration_pub.publish(acc_msg)
-
                 self.get_logger().info(f"Published Acceleration: {acc_msg.vector.x}, {acc_msg.vector.y}, {acc_msg.vector.z}")
 
 def main(args=None):
@@ -80,4 +84,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-    
+
