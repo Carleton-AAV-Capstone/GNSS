@@ -65,7 +65,7 @@ class GNSSIMUPublisher(Node):
                 ang_vel_msg.angular_velocity.z = z_ang_rate
                 
                 self.imu_pub.publish(ang_vel_msg)
-                self.get_logger().info(f"Published Angular Velocity: {imu_msg.angular_velocity.x}, {imu_msg.angular_velocity.y}, {imu_msg.angular_velocity.z}")
+                self.get_logger().info(f"Published Angular Velocity: {ang_vel_msg.angular_velocity.x}, {ang_vel_msg.angular_velocity.y}, {ang_vel_msg.angular_velocity.z}")
 
                 acc_msg = Vector3Stamped()
                 acc_msg.vector.x = x_accel
